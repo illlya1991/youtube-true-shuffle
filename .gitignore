@@ -1,0 +1,9 @@
+# Store submission archive — rebuilt on demand, not source
+*.zip
+
+# Python bytecode from the asset generator
+__pycache__/
+
+# Chrome Web Store submission material: screenshots of a private playlist,
+# listing copy, raw captures. Kept locally, never published.
+store/

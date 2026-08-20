@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube True Shuffle Toggle",
+  "version": "1.5.0",
+  "description": "Real (Fisher-Yates) shuffle for YouTube playlists. Shuffles the whole playlist, not just the part on screen. Your playlist is never modified.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

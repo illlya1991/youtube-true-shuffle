@@ -1,0 +1,91 @@
+#true-shuffle-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  /* Fixed height so the pill lines up with YouTube's own icon buttons
+     instead of stretching the header row. Vertical padding is 0 — the
+     height alone controls the size. */
+  height: 26px;
+  box-sizing: border-box;
+  padding: 0 9px;
+  border-radius: 13px;
+  border: 1px solid rgba(128, 128, 128, 0.5);
+  background: transparent;
+  color: inherit;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  vertical-align: middle;
+  line-height: 1;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+/* The icon carries the meaning here, so it's deliberately larger than the
+   label. pointer-events stay off the SVG so clicks always hit the button. */
+#true-shuffle-toggle-btn .true-shuffle-icon {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  pointer-events: none;
+}
+
+#true-shuffle-toggle-btn .true-shuffle-label {
+  pointer-events: none;
+}
+
+#true-shuffle-toggle-btn:hover {
+  background: rgba(128, 128, 128, 0.2);
+}
+
+#true-shuffle-toggle-btn.true-shuffle-active {
+  background: #3ea6ff;
+  color: #0f0f0f;
+  border-color: #3ea6ff;
+}
+
+#true-shuffle-toggle-btn.true-shuffle-active:hover {
+  background: #6cb8ff;
+}
+
+/* Guaranteed-visible fallback position, used when the extension can't
+   find a spot next to YouTube's native shuffle button. */
+#true-shuffle-toggle-btn.true-shuffle-floating {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 9999;
+  background: #212121;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  margin-left: 0;
+}
+
+#true-shuffle-toggle-btn.true-shuffle-floating:hover {
+  background: #3a3a3a;
+}
+
+#true-shuffle-toggle-btn.true-shuffle-floating.true-shuffle-active {
+  background: #3ea6ff;
+  color: #0f0f0f;
+}
+
+/* Shown while the full playlist is being fetched from YouTube's page data,
+   which takes a moment on very long playlists. */
+#true-shuffle-toggle-btn.true-shuffle-busy {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+#true-shuffle-toggle-btn.true-shuffle-busy .true-shuffle-icon {
+  animation: true-shuffle-spin 1s linear infinite;
+}
+
+@keyframes true-shuffle-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
