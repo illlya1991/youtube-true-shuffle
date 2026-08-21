@@ -19,6 +19,9 @@
   let hookedVideoEl = null;
   let advancing = false;
   let busy = false;
+  // The video id WE asked for last. If the page ends up somewhere else while
+  // shuffle is on, that tells us the jump did not come from this extension.
+  let lastRequestedVideoId = null;
 
   // ---------- helpers ----------
 
@@ -236,6 +239,21 @@
 
   function navigateTo(videoId) {
     if (!videoId) return;
+
+    // Pausing first is what actually settles the race. While the video is
+    // still running, YouTube has its own end-of-video handler queued; if our
+    // navigation lands mid-transition it can be discarded and YouTube's
+    // choice wins instead. A paused video never reaches that handler.
+    const video = document.querySelector('video');
+    if (video) {
+      try {
+        video.pause();
+      } catch (e) {
+        /* player already torn down */
+      }
+    }
+
+    lastRequestedVideoId = videoId;
     const listId = state.listId;
     const target = `/watch?v=${videoId}${listId ? '&list=' + listId : ''}`;
     // Click a real same-origin link so YouTube's SPA router handles the
@@ -559,6 +577,31 @@
 
   // ---------- SPA navigation handling ----------
 
+  // Says out loud, in the page console, who is responsible when playback
+  // ends up on a video that is not in the shuffled order. Without this the
+  // two possible causes — a bad entry in our order, or YouTube's autoplay
+  // overriding us — look identical from the outside.
+  function auditLanding() {
+    if (!state.enabled || state.order.length === 0) return;
+    const vid = getVideoIdFromUrl();
+    if (!vid || state.order.indexOf(vid) !== -1) return;
+
+    if (vid === lastRequestedVideoId) {
+      console.warn(
+        '[TrueShuffle] this extension navigated to %s, which is NOT in the ' +
+          'shuffled order — the order itself is contaminated.',
+        vid
+      );
+    } else {
+      console.warn(
+        '[TrueShuffle] playback moved to %s on its own (we last asked for %s). ' +
+          'YouTube overrode the shuffled order — not an order problem.',
+        vid,
+        lastRequestedVideoId
+      );
+    }
+  }
+
   function onNavigate() {
     advancing = false;
     const listId = getListIdFromUrl();
@@ -592,6 +635,7 @@
     insertButton();
     hookVideoElement();
     scheduleAnchorRetries();
+    auditLanding();
   }
 
   // Only re-run the check when the page actually updates: a full reload
