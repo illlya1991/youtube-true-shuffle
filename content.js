@@ -8,6 +8,12 @@
 (function () {
   const STORAGE_PREFIX = 'trueShuffle_';
 
+  // Bumped whenever a bug could have written a bad order to storage. Saved
+  // orders stamped with anything else are discarded rather than replayed —
+  // v1 orders could contain videos that were never in the playlist (they
+  // came from the "suggested videos" shelf on playlists you own).
+  const ORDER_VERSION = 2;
+
   let state = { enabled: false, listId: null, order: [], pointer: -1 };
   let buttonEl = null;
   let hookedVideoEl = null;
@@ -77,40 +83,68 @@
     return null;
   }
 
-  // Walk the whole response instead of hard-coding a path into it — YouTube
-  // reshuffles its renderer nesting constantly. It has also been migrating
-  // playlists from the old `playlistVideoRenderer` to the newer
-  // `lockupViewModel`, so both shapes are collected; likewise the
-  // continuation token, which now sits one level deeper than it used to.
+  // Collecting every video-shaped renderer in the response is wrong: a
+  // playlist page also carries OTHER video lists - most importantly the
+  // "suggested videos to add" shelf YouTube shows on playlists you own.
+  // Those are the same `lockupViewModel` type, so a naive sweep pulled them
+  // into the shuffle and eventually navigated to a video that was never in
+  // the playlist, while the list stayed active in the URL.
+  //
+  // The playlist itself is always the single largest array of video items in
+  // the response; a suggestions shelf holds a handful by comparison. So we
+  // score every array and keep only the winner, which needs no knowledge of
+  // YouTube's current nesting.
+  function videoIdOf(node) {
+    if (!node || typeof node !== 'object') return null;
+    if (node.playlistVideoRenderer && node.playlistVideoRenderer.videoId) {
+      return node.playlistVideoRenderer.videoId;
+    }
+    const lockup = node.lockupViewModel;
+    if (lockup && lockup.contentType === 'LOCKUP_CONTENT_TYPE_VIDEO' && lockup.contentId) {
+      return lockup.contentId;
+    }
+    return null;
+  }
+
   function harvestVideoIds(node, seen, out) {
     let token = null;
-
-    const add = (id) => {
-      if (id && !seen.has(id)) {
-        seen.add(id);
-        out.push(id);
-      }
-    };
+    let best = null;
+    let bestCount = 0;
 
     const visit = (n) => {
       if (!n || typeof n !== 'object') return;
+
       if (Array.isArray(n)) {
+        let count = 0;
+        n.forEach((child) => {
+          if (videoIdOf(child)) count++;
+        });
+        if (count > bestCount) {
+          bestCount = count;
+          best = n;
+        }
         n.forEach(visit);
         return;
       }
 
-      if (n.playlistVideoRenderer) add(n.playlistVideoRenderer.videoId);
-      if (n.lockupViewModel && n.lockupViewModel.contentType === 'LOCKUP_CONTENT_TYPE_VIDEO') {
-        add(n.lockupViewModel.contentId);
-      }
       if (n.continuationCommand && typeof n.continuationCommand.token === 'string') {
         token = n.continuationCommand.token;
       }
-
       Object.keys(n).forEach((k) => visit(n[k]));
     };
 
     visit(node);
+
+    if (best) {
+      best.forEach((child) => {
+        const id = videoIdOf(child);
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          out.push(id);
+        }
+      });
+    }
+
     return token;
   }
 
@@ -180,6 +214,7 @@
     if (!state.listId) return;
     chrome.storage.local.set({
       [storageKey(state.listId)]: {
+        version: ORDER_VERSION,
         enabled: state.enabled,
         order: state.order,
         pointer: state.pointer,
@@ -189,7 +224,13 @@
 
   function loadState(listId, cb) {
     chrome.storage.local.get([storageKey(listId)], (res) => {
-      cb(res[storageKey(listId)] || null);
+      const saved = res[storageKey(listId)];
+      if (!saved || saved.version !== ORDER_VERSION) {
+        // Stale or suspect: start clean instead of replaying a bad order.
+        cb(null);
+        return;
+      }
+      cb(saved);
     });
   }
 
