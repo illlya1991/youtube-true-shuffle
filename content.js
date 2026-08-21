@@ -10,9 +10,10 @@
 
   // Bumped whenever a bug could have written a bad order to storage. Saved
   // orders stamped with anything else are discarded rather than replayed —
-  // v1 orders could contain videos that were never in the playlist (they
-  // came from the "suggested videos" shelf on playlists you own).
-  const ORDER_VERSION = 2;
+  // v1 orders could contain videos that were never in the playlist (they came
+  // from the "suggested videos" shelf on playlists you own); v2 orders were
+  // truncated instead, holding only part of a long playlist.
+  const ORDER_VERSION = 3;
 
   let state = { enabled: false, listId: null, order: [], pointer: -1 };
   let buttonEl = null;
@@ -86,17 +87,16 @@
     return null;
   }
 
-  // Collecting every video-shaped renderer in the response is wrong: a
-  // playlist page also carries OTHER video lists - most importantly the
-  // "suggested videos to add" shelf YouTube shows on playlists you own.
-  // Those are the same `lockupViewModel` type, so a naive sweep pulled them
-  // into the shuffle and eventually navigated to a video that was never in
-  // the playlist, while the list stayed active in the URL.
+  // A playlist page carries more than the playlist: on a list you own,
+  // YouTube adds a "suggested videos to add" shelf built from the very same
+  // lockupViewModel type. Sweeping every video-shaped node pulled those into
+  // the shuffle, so playback jumped to videos that were never in the list.
   //
-  // The playlist itself is always the single largest array of video items in
-  // the response; a suggestions shelf holds a handful by comparison. So we
-  // score every array and keep only the winner, which needs no knowledge of
-  // YouTube's current nesting.
+  // The reliable difference is the link each item points at: real entries
+  // navigate to /watch?v=...&list=<this playlist>&index=N, suggestions just
+  // to /watch?v=... So membership is decided per item, which — unlike
+  // picking the single biggest array — cannot silently drop part of the
+  // playlist.
   function videoIdOf(node) {
     if (!node || typeof node !== 'object') return null;
     if (node.playlistVideoRenderer && node.playlistVideoRenderer.videoId) {
@@ -109,24 +109,53 @@
     return null;
   }
 
-  function harvestVideoIds(node, seen, out) {
+  function belongsToPlaylist(node, listId) {
+    let found = false;
+    const needle = 'list=' + listId;
+    const scan = (n) => {
+      if (found || !n || typeof n !== 'object') return;
+      if (Array.isArray(n)) {
+        n.forEach(scan);
+        return;
+      }
+      const meta = n.webCommandMetadata;
+      if (meta && typeof meta.url === 'string' && meta.url.indexOf(needle) !== -1) {
+        found = true;
+        return;
+      }
+      if (n.watchEndpoint && n.watchEndpoint.playlistId === listId) {
+        found = true;
+        return;
+      }
+      Object.keys(n).forEach((k) => scan(n[k]));
+    };
+    scan(node);
+    return found;
+  }
+
+  // listId may be null to accept every video item — used as a fallback if
+  // the membership marker ever disappears from YouTube's data.
+  function harvestVideoIds(node, seen, out, listId) {
     let token = null;
-    let best = null;
-    let bestCount = 0;
+    let rejected = 0;
 
     const visit = (n) => {
       if (!n || typeof n !== 'object') return;
-
       if (Array.isArray(n)) {
-        let count = 0;
-        n.forEach((child) => {
-          if (videoIdOf(child)) count++;
-        });
-        if (count > bestCount) {
-          bestCount = count;
-          best = n;
-        }
         n.forEach(visit);
+        return;
+      }
+
+      const id = videoIdOf(n);
+      if (id) {
+        if (listId && !belongsToPlaylist(n, listId)) {
+          rejected++;
+          return;
+        }
+        if (!seen.has(id)) {
+          seen.add(id);
+          out.push(id);
+        }
         return;
       }
 
@@ -137,18 +166,7 @@
     };
 
     visit(node);
-
-    if (best) {
-      best.forEach((child) => {
-        const id = videoIdOf(child);
-        if (id && !seen.has(id)) {
-          seen.add(id);
-          out.push(id);
-        }
-      });
-    }
-
-    return token;
+    return { token: token, rejected: rejected };
   }
 
   async function fetchAllPlaylistVideoIds(listId) {
@@ -163,7 +181,20 @@
 
     const seen = new Set();
     const ids = [];
-    let token = harvestVideoIds(JSON.parse(raw), seen, ids);
+    const first = JSON.parse(raw);
+    let harvest = harvestVideoIds(first, seen, ids, listId);
+
+    // Safety valve: if the membership marker ever vanishes from YouTube's
+    // data, every item would be rejected and shuffle would do nothing.
+    // Better to take the page as-is than to break entirely.
+    if (ids.length === 0 && harvest.rejected > 0) {
+      console.warn(
+        '[TrueShuffle] no item declared playlist membership; accepting all ' +
+          harvest.rejected + ' video items on the page'
+      );
+      harvest = harvestVideoIds(first, seen, ids, null);
+    }
+    let token = harvest.token;
 
     const apiKey = (html.match(/"INNERTUBE_API_KEY":"([^"]+)"/) || [])[1];
     const clientVersion = (html.match(/"INNERTUBE_CLIENT_VERSION":"([^"]+)"/) || [])[1];
@@ -182,7 +213,7 @@
       });
       if (!r.ok) break;
       const before = ids.length;
-      token = harvestVideoIds(await r.json(), seen, ids);
+      token = harvestVideoIds(await r.json(), seen, ids, listId).token;
       if (ids.length === before) break; // no progress — stop rather than loop
     }
 
