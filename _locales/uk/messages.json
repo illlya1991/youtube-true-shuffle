@@ -1,0 +1,24 @@
+{
+  "extName": {
+    "message": "YouTube True Shuffle Toggle",
+    "description": "Extension name shown in Chrome and in the store"
+  },
+  "extDescription": {
+    "message": "Справжнє перемішування плейлистів YouTube. Перемішує весь список, а не лише завантажену на екрані частину.",
+    "description": "Store description; Chrome caps this at 132 characters"
+  },
+  "tooltipOn": {
+    "message": "True Shuffle: УВІМКНЕНО — $COUNT$ відео у справді випадковому порядку. Натисніть, щоб вимкнути.",
+    "description": "Button tooltip while shuffle is active",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "379"
+      }
+    }
+  },
+  "tooltipOff": {
+    "message": "True Shuffle: ВИМКНЕНО — натисніть для справді випадкового порядку по всьому плейлисту",
+    "description": "Button tooltip while shuffle is off"
+  }
+}

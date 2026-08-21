@@ -1,0 +1,24 @@
+{
+  "extName": {
+    "message": "YouTube True Shuffle Toggle",
+    "description": "Extension name shown in Chrome and in the store"
+  },
+  "extDescription": {
+    "message": "Real Fisher-Yates shuffle for YouTube playlists. Shuffles the whole playlist, not just the part loaded on screen.",
+    "description": "Store description; Chrome caps this at 132 characters"
+  },
+  "tooltipOn": {
+    "message": "True Shuffle: ON — $COUNT$ videos in a real random order. Click to turn off.",
+    "description": "Button tooltip while shuffle is active",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "379"
+      }
+    }
+  },
+  "tooltipOff": {
+    "message": "True Shuffle: OFF — click for a real random order over the whole playlist",
+    "description": "Button tooltip while shuffle is off"
+  }
+}

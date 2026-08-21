@@ -1,0 +1,24 @@
+{
+  "extName": {
+    "message": "YouTube True Shuffle Toggle",
+    "description": "Extension name shown in Chrome and in the store"
+  },
+  "extDescription": {
+    "message": "Prawdziwe losowanie playlist YouTube. Miesza całą playlistę, a nie tylko część wczytaną na ekranie.",
+    "description": "Store description; Chrome caps this at 132 characters"
+  },
+  "tooltipOn": {
+    "message": "True Shuffle: WŁĄCZONE — $COUNT$ filmów w naprawdę losowej kolejności. Kliknij, aby wyłączyć.",
+    "description": "Button tooltip while shuffle is active",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "379"
+      }
+    }
+  },
+  "tooltipOff": {
+    "message": "True Shuffle: WYŁĄCZONE — kliknij, aby uzyskać naprawdę losową kolejność całej playlisty",
+    "description": "Button tooltip while shuffle is off"
+  }
+}

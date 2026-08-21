@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "YouTube True Shuffle Toggle",
-  "version": "1.5.8",
-  "description": "Real Fisher-Yates shuffle for YouTube playlists. Shuffles the whole playlist, not just the part loaded on screen.",
+  "name": "__MSG_extName__",
+  "version": "1.6.0",
+  "description": "__MSG_extDescription__",
+  "default_locale": "en",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",

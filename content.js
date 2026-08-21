@@ -527,6 +527,20 @@
 
   // ---------- UI ----------
 
+  // chrome.i18n picks the message file matching the browser's UI language,
+  // falling back to _locales/en. The literal stays as a last resort: if the
+  // catalogue is ever missing an entry, a readable English tooltip beats an
+  // empty one.
+  function msg(key, substitutions, fallback) {
+    try {
+      const text = chrome.i18n.getMessage(key, substitutions);
+      if (text) return text;
+    } catch (e) {
+      /* i18n unavailable */
+    }
+    return fallback;
+  }
+
   function setBusy(value) {
     busy = value;
     if (buttonEl) buttonEl.classList.toggle('true-shuffle-busy', value);
@@ -539,8 +553,10 @@
     buttonEl.setAttribute('aria-label', 'True Shuffle');
     const count = state.order.length;
     buttonEl.title = state.enabled
-      ? 'True Shuffle: ON — ' + count + ' videos in a real random order. Click to turn off.'
-      : 'True Shuffle: OFF — click for a real random order over the whole playlist';
+      ? msg('tooltipOn', [String(count)],
+          'True Shuffle: ON — ' + count + ' videos in a real random order. Click to turn off.')
+      : msg('tooltipOff', [],
+          'True Shuffle: OFF — click for a real random order over the whole playlist');
   }
 
   // aria-label text is translated per UI language (e.g. Ukrainian uses

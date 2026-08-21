@@ -1,0 +1,24 @@
+{
+  "extName": {
+    "message": "YouTube True Shuffle Toggle",
+    "description": "Extension name shown in Chrome and in the store"
+  },
+  "extDescription": {
+    "message": "Настоящее перемешивание плейлистов YouTube. Перемешивает весь список, а не только загруженную часть.",
+    "description": "Store description; Chrome caps this at 132 characters"
+  },
+  "tooltipOn": {
+    "message": "True Shuffle: ВКЛ — $COUNT$ видео в по-настоящему случайном порядке. Нажмите, чтобы выключить.",
+    "description": "Button tooltip while shuffle is active",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "379"
+      }
+    }
+  },
+  "tooltipOff": {
+    "message": "True Shuffle: ВЫКЛ — нажмите для по-настоящему случайного порядка по всему плейлисту",
+    "description": "Button tooltip while shuffle is off"
+  }
+}
