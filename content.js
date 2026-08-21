@@ -13,7 +13,7 @@
   // v1 orders could contain videos that were never in the playlist (they came
   // from the "suggested videos" shelf on playlists you own); v2 orders were
   // truncated instead, holding only part of a long playlist.
-  const ORDER_VERSION = 4;
+  const ORDER_VERSION = 5;
 
   let state = { enabled: false, listId: null, order: [], pointer: -1 };
   let buttonEl = null;
@@ -133,40 +133,88 @@
     return found;
   }
 
-  // listId may be null to accept every video item — used as a fallback if
-  // the membership marker ever disappears from YouTube's data.
+  // A playlist page has more than one continuation: the playlist itself has
+  // one, and so does the "suggested videos" shelf beside it. Taking whatever
+  // token the walk happened to see last followed the wrong one — it returned
+  // five videos and then dried up, which is why a 379-video playlist stopped
+  // at 105.
+  //
+  // The token that continues the playlist lives in the same array as the
+  // playlist items (YouTube appends it as the array's last entry), so pick
+  // the token from the array that actually produced items, preferring the
+  // array that produced the most.
   function harvestVideoIds(node, seen, out, listId) {
-    let token = null;
+    let fallbackToken = null;
+    let listToken = null;
+    let listTokenScore = 0;
     let rejected = 0;
+
+    const tokenInArray = (arr) => {
+      for (const entry of arr) {
+        if (!entry || typeof entry !== 'object') continue;
+        const holder =
+          entry.continuationItemRenderer || entry.continuationItemViewModel || entry;
+        let token = null;
+        const dig = (n, depth) => {
+          if (token || !n || typeof n !== 'object' || depth > 6) return;
+          if (n.continuationCommand && typeof n.continuationCommand.token === 'string') {
+            token = n.continuationCommand.token;
+            return;
+          }
+          Object.keys(n).forEach((k) => dig(n[k], depth + 1));
+        };
+        dig(holder, 0);
+        if (token) return token;
+      }
+      return null;
+    };
 
     const visit = (n) => {
       if (!n || typeof n !== 'object') return;
+
       if (Array.isArray(n)) {
+        let produced = 0;
+        n.forEach((entry) => {
+          const id = videoIdOf(entry);
+          if (!id) return;
+          if (listId && !belongsToPlaylist(entry, listId)) {
+            rejected++;
+            return;
+          }
+          produced++;
+          if (!seen.has(id)) {
+            seen.add(id);
+            out.push(id);
+          }
+        });
+
+        if (produced > listTokenScore) {
+          const token = tokenInArray(n);
+          if (token) {
+            listToken = token;
+            listTokenScore = produced;
+          }
+        }
+
         n.forEach(visit);
         return;
       }
 
-      const id = videoIdOf(n);
-      if (id) {
-        if (listId && !belongsToPlaylist(n, listId)) {
-          rejected++;
-          return;
-        }
-        if (!seen.has(id)) {
-          seen.add(id);
-          out.push(id);
-        }
-        return;
-      }
-
       if (n.continuationCommand && typeof n.continuationCommand.token === 'string') {
-        token = n.continuationCommand.token;
+        fallbackToken = n.continuationCommand.token;
       }
       Object.keys(n).forEach((k) => visit(n[k]));
     };
 
     visit(node);
-    return { token: token, rejected: rejected };
+
+    // A token from somewhere else on the page is only worth following when we
+    // found no playlist items at all and therefore know nothing about the
+    // structure. Once items have been read, the absence of a token in their
+    // own array means the playlist simply ended — chasing a foreign one is
+    // what fetched five unrelated videos and stopped.
+    const token = listToken || (out.length === 0 ? fallbackToken : null);
+    return { token: token, rejected: rejected, scoped: !!listToken };
   }
 
   // Page one arrives as HTML with the user's cookies, so a private playlist
@@ -287,7 +335,7 @@
       console.info(
         '[TrueShuffle] continuation ' + pages + ': +' + (ids.length - before) +
           ' videos (rejected ' + page.rejected + ', total ' + ids.length +
-          ', next token ' + (token ? 'yes' : 'no') + ')'
+          ', next token ' + (token ? (page.scoped ? 'yes' : 'yes/unscoped') : 'no') + ')'
       );
       if (ids.length === before) break; // no progress — stop rather than loop
     }
