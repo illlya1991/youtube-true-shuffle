@@ -148,6 +148,7 @@
     let listToken = null;
     let listTokenScore = 0;
     let rejected = 0;
+    let duplicates = 0;
 
     const tokenInArray = (arr) => {
       for (const entry of arr) {
@@ -182,10 +183,15 @@
             return;
           }
           produced++;
-          if (!seen.has(id)) {
-            seen.add(id);
-            out.push(id);
+          if (seen.has(id)) {
+            // The same video added to the playlist more than once. Kept out
+            // of the order on purpose: a shuffle that plays one track twice
+            // per lap is exactly the complaint this extension exists to fix.
+            duplicates++;
+            return;
           }
+          seen.add(id);
+          out.push(id);
         });
 
         if (produced > listTokenScore) {
@@ -214,7 +220,12 @@
     // own array means the playlist simply ended — chasing a foreign one is
     // what fetched five unrelated videos and stopped.
     const token = listToken || (out.length === 0 ? fallbackToken : null);
-    return { token: token, rejected: rejected, scoped: !!listToken };
+    return {
+      token: token,
+      rejected: rejected,
+      duplicates: duplicates,
+      scoped: !!listToken,
+    };
   }
 
   // Page one arrives as HTML with the user's cookies, so a private playlist
@@ -274,6 +285,7 @@
     const ids = [];
     const first = JSON.parse(raw);
     let harvest = harvestVideoIds(first, seen, ids, listId);
+    let duplicates = harvest.duplicates;
 
     // Safety valve: if the membership marker ever vanishes from YouTube's
     // data, every item would be rejected and shuffle would do nothing.
@@ -332,6 +344,7 @@
       const before = ids.length;
       const page = harvestVideoIds(await r.json(), seen, ids, listId);
       token = page.token;
+      duplicates += page.duplicates;
       console.info(
         '[TrueShuffle] continuation ' + pages + ': +' + (ids.length - before) +
           ' videos (rejected ' + page.rejected + ', total ' + ids.length +
@@ -343,8 +356,19 @@
     // console.info, not console.debug: Chrome hides the Verbose level by
     // default, and this is the one line that tells you whether the whole
     // playlist was actually read.
+    // The count YouTube shows in the panel includes entries this list will
+    // not have: the same video added twice, and videos that have since gone
+    // private or been deleted (the playlist page omits those). Saying which
+    // is which here saves guessing at a number that looks short.
     console.info(
-      '[TrueShuffle] loaded ' + ids.length + ' videos in ' + (pages + 1) + ' request(s)'
+      '[TrueShuffle] loaded ' + ids.length + ' videos in ' + (pages + 1) +
+        ' request(s)' +
+        (duplicates
+          ? ' — ' + duplicates + ' duplicate entr' + (duplicates === 1 ? 'y' : 'ies') +
+            ' collapsed'
+          : '') +
+        '. If this is short of the count YouTube shows, the rest are ' +
+        'unavailable videos (deleted or gone private).'
     );
     return ids;
   }
