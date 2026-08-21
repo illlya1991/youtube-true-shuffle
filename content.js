@@ -13,7 +13,7 @@
   // v1 orders could contain videos that were never in the playlist (they came
   // from the "suggested videos" shelf on playlists you own); v2 orders were
   // truncated instead, holding only part of a long playlist.
-  const ORDER_VERSION = 3;
+  const ORDER_VERSION = 4;
 
   let state = { enabled: false, listId: null, order: [], pointer: -1 };
   let buttonEl = null;
@@ -169,6 +169,49 @@
     return { token: token, rejected: rejected };
   }
 
+  // Page one arrives as HTML with the user's cookies, so a private playlist
+  // renders fine. The continuation requests are a plain POST, and cookies
+  // alone are not enough there: Google's own client signs these calls with a
+  // SAPISIDHASH Authorization header, and without it the API answers as if
+  // nobody were logged in — which for a private playlist means no items, so
+  // the walk stopped after the first page.
+  //
+  // This is the same signature YouTube's own page script computes, from a
+  // cookie the page can read, for a request to its own origin.
+  function readCookie(name) {
+    const parts = document.cookie ? document.cookie.split('; ') : [];
+    for (const part of parts) {
+      const eq = part.indexOf('=');
+      if (eq !== -1 && part.slice(0, eq) === name) return part.slice(eq + 1);
+    }
+    return null;
+  }
+
+  async function sha1Hex(text) {
+    const bytes = new TextEncoder().encode(text);
+    const digest = await crypto.subtle.digest('SHA-1', bytes);
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  async function authHeaders() {
+    const sapisid =
+      readCookie('SAPISID') ||
+      readCookie('__Secure-3PAPISID') ||
+      readCookie('__Secure-1PAPISID');
+    if (!sapisid) return {}; // logged out: public playlists still work
+
+    const origin = 'https://www.youtube.com';
+    const stamp = Math.floor(Date.now() / 1000);
+    const hash = await sha1Hex(stamp + ' ' + sapisid + ' ' + origin);
+    return {
+      Authorization: 'SAPISIDHASH ' + stamp + '_' + hash,
+      'X-Origin': origin,
+      'X-Goog-AuthUser': '0',
+    };
+  }
+
   async function fetchAllPlaylistVideoIds(listId) {
     const res = await fetch('/playlist?list=' + encodeURIComponent(listId), {
       credentials: 'include',
@@ -198,22 +241,54 @@
 
     const apiKey = (html.match(/"INNERTUBE_API_KEY":"([^"]+)"/) || [])[1];
     const clientVersion = (html.match(/"INNERTUBE_CLIENT_VERSION":"([^"]+)"/) || [])[1];
+    const visitorData = (html.match(/"visitorData":"([^"]+)"/) || [])[1];
+    const signed = await authHeaders();
 
     let pages = 0;
     while (token && apiKey && clientVersion && pages < MAX_CONTINUATION_PAGES) {
       pages++;
+      const headers = Object.assign(
+        {
+          'Content-Type': 'application/json',
+          'X-Youtube-Client-Name': '1',
+          'X-Youtube-Client-Version': clientVersion,
+        },
+        signed
+      );
+      if (visitorData) headers['X-Goog-Visitor-Id'] = visitorData;
+
       const r = await fetch('/youtubei/v1/browse?key=' + apiKey + '&prettyPrint=false', {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify({
-          context: { client: { clientName: 'WEB', clientVersion: clientVersion } },
+          context: {
+            client: {
+              clientName: 'WEB',
+              clientVersion: clientVersion,
+              visitorData: visitorData,
+            },
+          },
           continuation: token,
         }),
       });
-      if (!r.ok) break;
+
+      if (!r.ok) {
+        console.warn(
+          '[TrueShuffle] continuation ' + pages + ' failed: HTTP ' + r.status +
+            ' — stopping with ' + ids.length + ' videos'
+        );
+        break;
+      }
+
       const before = ids.length;
-      token = harvestVideoIds(await r.json(), seen, ids, listId).token;
+      const page = harvestVideoIds(await r.json(), seen, ids, listId);
+      token = page.token;
+      console.info(
+        '[TrueShuffle] continuation ' + pages + ': +' + (ids.length - before) +
+          ' videos (rejected ' + page.rejected + ', total ' + ids.length +
+          ', next token ' + (token ? 'yes' : 'no') + ')'
+      );
       if (ids.length === before) break; // no progress — stop rather than loop
     }
 
