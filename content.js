@@ -186,7 +186,12 @@
       if (ids.length === before) break; // no progress — stop rather than loop
     }
 
-    console.debug('[TrueShuffle] loaded', ids.length, 'videos in', pages + 1, 'request(s)');
+    // console.info, not console.debug: Chrome hides the Verbose level by
+    // default, and this is the one line that tells you whether the whole
+    // playlist was actually read.
+    console.info(
+      '[TrueShuffle] loaded ' + ids.length + ' videos in ' + (pages + 1) + ' request(s)'
+    );
     return ids;
   }
 
@@ -300,8 +305,13 @@
     }
     // Fallback for mixes, private edge cases, or a YouTube data change:
     // shuffle whatever the panel has rendered rather than doing nothing.
-    if (ids.length === 0) ids = scrapePlaylistVideoIds();
+    let source = 'page data';
+    if (ids.length === 0) {
+      ids = scrapePlaylistVideoIds();
+      source = 'DOM panel (fallback — only the rendered part of the playlist)';
+    }
     if (ids.length === 0) return false;
+    console.info('[TrueShuffle] shuffling ' + ids.length + ' videos, source: ' + source);
 
     let order = fisherYates(ids);
     const currentVid = getVideoIdFromUrl();
